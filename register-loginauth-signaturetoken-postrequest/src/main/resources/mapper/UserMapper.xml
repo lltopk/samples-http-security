@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.lltopk.signaturetokenwithprivatekeyafterauth.dao.UserMapper">
+
+    <resultMap id="UserResult" type="org.lltopk.httpsecuritycommon.po.UserPo">
+        <id property="id" column="id"/>
+        <result property="username" column="username"/>
+        <result property="password" column="password"/>
+        <result property="email" column="email"/>
+        <result property="salt" column="salt"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+
+    <resultMap id="NonceResult" type="org.lltopk.signaturetokenwithprivatekeyafterauth.entity.Nonce">
+        <id property="id" column="id"/>
+        <result property="nonce" column="nonce"/>
+        <result property="timestamp" column="timestamp"/>
+        <result property="createTime" column="create_time"/>
+    </resultMap>
+
+    <!-- Find user by id -->
+    <select id="findById" resultMap="UserResult">
+        SELECT id, username, password, email, salt, create_time, update_time
+        FROM user_http_security
+        WHERE id = #{id}
+    </select>
+
+    <!-- Find user by username -->
+    <select id="findByUsername" resultMap="UserResult">
+        SELECT id, username, password, email, salt, create_time, update_time
+        FROM user_http_security
+        WHERE username = #{username}
+    </select>
+
+    <!-- Find user by email -->
+    <select id="findByEmail" resultMap="UserResult">
+        SELECT id, username, password, email, salt, create_time, update_time
+        FROM user_http_security
+        WHERE email = #{email}
+    </select>
+
+    <!-- Save new user -->
+    <insert id="save" parameterType="org.lltopk.httpsecuritycommon.po.UserPo" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user_http_security (
+            username, password, email, salt, create_time, update_time
+        ) VALUES (
+            #{username}, #{password}, #{email}, #{salt}, #{createTime}, #{updateTime}
+        )
+    </insert>
+
+    <!-- Update user -->
+    <update id="update" parameterType="org.lltopk.httpsecuritycommon.po.UserPo">
+        UPDATE user_http_security
+        SET username = #{username},
+            password = #{password},
+            email = #{email},
+            salt = #{salt},
+            update_time = #{updateTime}
+        WHERE id = #{id}
+    </update>
+
+    <!-- Find nonce by value -->
+    <select id="findNonce" resultMap="NonceResult">
+        SELECT id, nonce, timestamp, create_time
+        FROM user_nonce
+        WHERE nonce = #{nonce}
+    </select>
+
+    <!-- Save nonce -->
+    <insert id="saveNonce">
+        INSERT INTO user_nonce (nonce, timestamp, create_time)
+        VALUES (#{nonce}, #{timestamp}, NOW())
+    </insert>
+
+    <!-- Delete expired nonces -->
+    <delete id="deleteExpiredNonces">
+        DELETE FROM user_nonce
+        WHERE timestamp &lt; #{expireTime}
+    </delete>
+
+</mapper>

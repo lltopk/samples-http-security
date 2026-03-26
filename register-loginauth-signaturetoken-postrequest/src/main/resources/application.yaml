@@ -1,0 +1,69 @@
+spring:
+  application:
+    name: authentication-with-publickey
+  datasource:
+    url: jdbc:mysql://192.168.18.100:3306/lyflexi?useSSL=false&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+    driver-class-name: com.mysql.jdbc.Driver
+    main:
+      allow-circular-references: true
+  data:
+    redis:
+      host: 192.168.18.100
+      port: 6379
+      database: 0
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: 100ms
+  mybatis-plus:
+    mapper-locations: classpath:/mapper/*.xml
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+
+
+server:
+  # Port number
+  port: 8080
+  ## 用户登录密码公钥加密, 服务器用私钥解析
+  rsa:
+    # Server RSA key pair configuration (Base64 encoded)
+    # If not set, a new key pair will be generated at startup
+    # For production, save the private key securely and configure it here
+    # private-key: "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC..."
+    # public-key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQE..."
+
+# Security configuration
+security:
+  jwt:
+    # Secret key for JWT signing (change in production!)
+    secret-key: ${JWT_SECRET_KEY:your-secure-secret-key-change-in-production-2024}
+    # Token expiration time in milliseconds (2 hours)
+    expiration-ms: 7200000
+    # Issuer
+    issuer: http-security-auth
+    # Audience
+    audience: http-security-client
+
+  password:
+    # Minimum password length
+    min-length: 6
+    # Maximum password length
+    max-length: 100
+
+  rsa:
+    # RSA key size (for generated keys)
+    key-size: 2048
+
+  # Replay attack prevention
+  replay-prevention:
+    # Nonce expiration time in seconds (5 minutes)
+    nonce-expire-seconds: 300
+    # Timestamp tolerance in milliseconds (5 minutes)
+    timestamp-tolerance-ms: 300000
