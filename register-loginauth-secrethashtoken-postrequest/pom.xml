@@ -9,7 +9,7 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>org.lltopk</groupId>
-    <artifactId>register-loginauth-signaturetoken-postrequest</artifactId>
+    <artifactId>register-loginauth-secrethashtoken-postrequest</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>signaturetoken-with-privatekey-after-auth</name>
     <description>signaturetoken-with-privatekey-after-auth</description>
