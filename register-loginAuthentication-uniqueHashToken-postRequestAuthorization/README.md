@@ -1,36 +1,62 @@
-# HTTP Security 认证 API 文档
 
-## 概述
-本系统实现了一个安全的认证流程，采用**服务器端管理的 RSA 密钥**：
-
-- **服务器密钥管理**：服务器生成并管理非对称 RSA 密钥对
-- **无需客户端生成密钥**：客户端**不**生成任何密钥
-- **用户注册**: 客户端返回公钥给客户端, 同时保存用户和相应的盐值到数据库
-- **用户登录公钥加密**：客户端登录密码使用服务器的公钥加密, 调用登录接口
-- **服务器私钥解析密码**：服务端私钥解析密码, 并哈希存储密码到数据库
-- **无需数字签名**：服务端无需用私钥对响应数据进行签名（简化流程）
-- **JWT 令牌**：上述认证成功后服务器用HMAC256, 用JWT专属的密钥进行复杂哈希运算令牌(token/非严格意义sign)返回给客户端
-- **令牌验证**：后续所有用户请求都需要有效的 JWT 令牌, 验证原理是用相同的哈希算法HMAC256和相同的JWT专属密钥, 再次生成签名(token/非严格意义sign), 验证与用户传输的token是否相等
-
-## 共享密钥消息认证码MAC
+## 一. 共享密钥消息认证码MAC
 正常来说求哈希不需要密钥, 如MD5、SHA-1等，仅依赖于输入数据本身，而不需要任何额外的密钥信息。这类函数广泛应用于数据完整性校验和数字签名中。
 
-如果求哈希带密钥, 就转换为了共享密钥消息认证码MAC,  如HMAC, 是一种结合了哈希函数和共享密钥的技术，用于验证消息的完整性和认证性。
+如果求哈希带密钥, 就转换为了共享密钥消息认证码MAC,  如基于哈希的消息认证码HMAC, 是一种结合了哈希函数和共享密钥的技术，用于消息认证性。
 
-工作原理：通信双方（例如Alice和Bob）预先共享一个秘密密钥。客户端（Alice）使用该密钥进行复杂哈希运算生成认证码（即MAC值），并附在消息后一起发送服务器.
+工作原理：通信双方（例如Alice和Bob）预先共享一个秘密密钥AppSecret。客户端（Alice）对关键信息(拼接请求方法+路径+参数+请求体)使用该密钥进行复杂哈希运算生成认证码（即MAC值），并将关键信息和认证码一起附在请求头中发送服务器.
 
 服务器（Bob）收到MAC后，用同样的哈希算法再次对关键信息哈希, 然后用同样的密钥进行复杂哈希计算出新的MAC值。二者对比如果一致，说明客户端就是用共享密钥发送的请求, 则通过认证
 
-共享密钥消息认证码MAC 与 非对称密钥服务器数字签名的区别就是, 前者密钥是共享的(同一个)而后者是公私钥对模式
+由于共享密钥消息认证码同时使用了哈希和密钥, 因此也叫做签名, 只不过和服务器用非对称私钥签名的区别是:
+1.	共享密钥消息认证码MAC是共享同一个密钥, 而服务器非对称私钥签名用的是密钥对中的私钥
+2.	共享密钥消息认证码MAC是先对内容用密钥拼接, 然后对整体哈希(比如以HMAC它的核心思想是将密钥以特定的方式，在哈希计算过程中使用两次，形成一个“内层”和“外层”的双层结构). 而服务器非对称私钥签名是先对内容哈希, 然后对哈希后的结果进行私钥签名
 
-尽管共享密钥消息认证码同时使用了哈希和密钥, 但要注意不是先哈希后密钥, 因此本质上不属于数字签名, MAC的目的还是为了认证
-
-比如以HMAC（基于哈希的消息认证码）为例，它的核心思想是将密钥以特定的方式，在哈希计算过程中使用两次，形成一个“内层”和“外层”的双层结构。
+因此 MAC在认证的同时, 由于签名属性, 也具有防篡改的功能, 毕竟除了CS双方, 其他人没有密钥, 黑客只能去修改关键信息(请求方法+路径+参数+请求体), 但只要一个参数被改动，服务器算出来的签名都会和客户端的签名不一样。
 
 
-## Token技术
 
-Token本质上就是共享密钥签名, 只不过不用把共享密钥发给客户端.
+## 二. 用户注册 登录认证 Token检查 用户索引 后续鉴权
+本系统实现了一个安全的认证和鉴权流程，分为用户注册登录, 以及登录认证之后的流程
+
+### 用户注册 登录认证
+初始的这两个阶段要需要 **服务器端管理的 RSA 非对称密钥对**：
+
+- 服务器密钥管理：服务器生成并管理非对称 RSA 密钥对
+- 无需客户端生成密钥：客户端不生成任何密钥
+- 用户注册: 保存用户名username, 盐值slat, 密码password混合盐值slat进行哈希MD5之后最终password到数据库. 注册成功并返回服务器公钥给客户端
+- 用户登录: 客户端用公钥对明文密码加密然后调用登录接口, 传输给后端, 服务端私钥解析密码, 并用相同的哈希算法再次计算哈希, 与数据库密码对比, 一致则通过认证
+
+### Token检查 用户索引 后续鉴权
+
+用户登录成功之后, 服务器要生成JWT令牌即Token给客户端, 以后每次请求都需携带Token证明身份
+- JWT令牌：登录认证成功后服务器用哈希算法HMAC256, 用JWT专属的密钥进行复杂哈希运算制作令牌(由于同时使用哈希和密钥因此也叫签名sign)返回给客户端
+- 检查令牌：后续所有用户请求都需要有效的 JWT 令牌, 验证原理是也用相同的哈希算法HMAC256和相同的JWT专属密钥, 对用户名等负载再次生成签名sign, 验证与用户传输token中的sign是否相等
+- 请求鉴权: 你能干什么。系统根据token找到这个用户的权限列表(可配置)，判断当前请求的资源（通常就是URL + HTTP方法）是否在权限范围内。
+
+我之前就写过一个认证+鉴权方式如下库，核心就是一个泛型接口：
+```java
+public interface Authenticator<P, C, T> {
+    // 用户首次登录验证密码(凭据), 认证成功返回token和权限列表
+    AuthResult<T> authenticate(P principal, C credentials);
+    
+    // 后续请求携带Token, 服务器根据token获取当前用户的权限集合
+    Set<String> getAuthorities(T token);
+    
+    // 判断当前请求是否有权限访问
+    boolean hasAccess(T token, String uri, String method);
+}
+```
+实现这个接口的时候，authenticate方法里查数据库验证用户名密码，验证通过就生成一个token，同时把用户的权限列表缓存起来。
+
+hasAccess方法里拿token找到权限列表，用Ant风格的路径匹配判断当前URL是否在权限范围内。
+
+配合一个Servlet Filter或者Spring的HandlerInterceptor，在请求进入业务逻辑之前做一次拦截，整个鉴权流程就跑通了。
+
+这个思路我用了很多年，换过不同的项目和团队，从来没遇到过它解决不了的场景。
+
+
+_Token本质上也是共享密钥消息认证码MAC, 只不过Token不用客户端做哈希和签名sign, 偷懒让用户原封不动携带Token(sign), 也不用把共享密钥发给客户端._
 
 一个完整的jwt实际上就是一个字符串，它由三部分组成:
 - 头部head、
@@ -90,9 +116,9 @@ eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9
 要说弊端, 就是token经过编码后特别长, 相比传统的sessionId开销要大
 
 
-## API 端点
+### API 端点测试用例
 
-### 1. 获取服务器公钥
+#### 1. 获取服务器公钥
 **端点：** `GET /api/auth/server-public-key`
 
 客户端必须在登录前调用此端点以获取服务器的公钥用于加密。
@@ -112,7 +138,7 @@ eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9
 
 ---
 
-### 2. 用户注册
+#### 2. 用户注册
 **端点：** `POST /api/auth/register`
 
 **请求体：**
@@ -142,7 +168,7 @@ eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9
 
 ---
 
-### 3. 用户登录
+#### 3. 用户登录
 **端点：** `POST /api/auth/login`
 
 **认证流程：**
@@ -180,7 +206,7 @@ eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9
 
 ---
 
-### 4. 获取用户信息（受保护）
+#### 4. 获取用户信息（受保护）
 **端点：** `GET /api/auth/profile`
 
 **请求头：**
@@ -204,7 +230,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ---
 
-### 5. 根据 ID 获取用户（受保护）
+#### 5. 根据 ID 获取用户（受保护）
 **端点：** `GET /api/auth/users/{id}`
 
 **请求头：**
@@ -212,34 +238,9 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
----
+### 客户端实现指南
 
-## 安全特性
-
-### 1. 密码存储
-- 密码使用 SHA-256 加随机盐, 再进行哈希
-- 盐单独存储，在哈希前与密码组合
-
-### 2. 服务器密钥管理
-- 整个应用使用单个 RSA-2048 密钥对
-- 密钥可在 `application.yaml` 中配置，或在启动时生成
-- 私钥在服务器上安全保存（生产环境请使用 HSM/KMS）
-
-### 3. 重放攻击防护
-- 时间戳验证（5 分钟窗口）
-- Nonce 跟踪（每个 nonce 只能使用一次）
-- JWT 包含唯一的 JTI（JWT ID）
-
-### 4. 令牌安全
-- JWT 使用 HMAC256 签名
-- 令牌有效期：2 小时
-- 令牌可通过黑名单撤销
-
----
-
-## 客户端实现指南
-
-### 步骤 1：获取服务器公钥
+#### 步骤 1：获取服务器公钥
 ```java
 // 调用 GET /api/auth/server-public-key
 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
@@ -250,13 +251,13 @@ String serverPublicKey = (String) ((Map) responseBody.get("data")).get("serverPu
 saveServerPublicKey(serverPublicKey);
 ```
 
-### 步骤 2：注册
+#### 步骤 2：注册
 ```java
 RegisterRequest request = new RegisterRequest("testuser", "password123", "test@example.com");
 ApiResponse<Map> response = httpClient.post("/api/auth/register", request);
 ```
 
-### 步骤 3：登录
+#### 步骤 3：登录
 ```java
 // 准备登录数据
 long timestamp = System.currentTimeMillis();
@@ -282,7 +283,7 @@ ApiResponse<LoginResponse> loginResponse = httpClient.post("/api/auth/login", lo
 String token = loginResponse.getData().getToken();
 ```
 
-### 步骤 4：访问受保护的端点
+#### 步骤 4：访问受保护的端点
 ```java
 // 将令牌添加到请求头
 httpClient.setHeader("Authorization", "Bearer " + token);
@@ -293,9 +294,9 @@ ApiResponse<Map> profile = httpClient.get("/api/auth/profile");
 
 ---
 
-## 错误响应
+### 错误响应
 
-### 401 未授权
+#### 401 未授权
 ```json
 {
   "code": 401,
@@ -303,7 +304,7 @@ ApiResponse<Map> profile = httpClient.get("/api/auth/profile");
 }
 ```
 
-### 400 错误请求
+#### 400 错误请求
 ```json
 {
   "code": 400,
@@ -311,7 +312,7 @@ ApiResponse<Map> profile = httpClient.get("/api/auth/profile");
 }
 ```
 
-### 500 服务器内部错误
+#### 500 服务器内部错误
 ```json
 {
   "code": 500,
@@ -321,15 +322,18 @@ ApiResponse<Map> profile = httpClient.get("/api/auth/profile");
 
 ---
 
-## 配置
+### 可配置
+- 整个应用使用单个 RSA-2048 密钥对
+- 密钥可在 `application.yaml` 中配置，或在启动时生成
+- 私钥在服务器上安全保存（生产环境请使用 HSM/KMS）
 
-### 环境变量
+#### 环境变量
 - `JWT_SECRET_KEY`：JWT 签名密钥（生产环境请更改！）
 - `DATABASE_URL`：MySQL 连接 URL
 - `DATABASE_USERNAME`：数据库用户名
 - `DATABASE_PASSWORD`：数据库密码
 
-### application.yaml
+#### application.yaml
 ```yaml
 server:
   rsa:
@@ -348,36 +352,18 @@ security:
     timestamp-tolerance-minutes: 5
 ```
 
----
+## 三. 重放攻击防护NONCE
+请求头中携带Timestamp和随机串Nonce, 和基于密钥对Timestamp和Nonce计算的摘要结果sign
+- Timestamp时间戳验证（5 分钟窗口）
+- Nonce随机串 跟踪（每个 nonce 只能使用一次）
+- sign
 
-## 数据库模式
+服务器提取Timestamp和随机串Nonce, 验证流程如下
+- 如果时间窗口curTime - Timestamp大于设定值窗口, 直接丢弃请求
+- 如果时间窗口curTime - Timestamp小于设定值窗口, 则用nonce判断是否出现过, 未出现过则在服务缓存中加入nonce, 出现过则直接丢弃
 
-参见 `src/main/resources/schema.sql` 进行数据库初始化。
+以上保证了防重放攻击.
 
-**主要变更：**
-- `user_http_security` 表不再有 `public_key` 和 `private_key` 列
-- 服务器密钥在应用配置中管理或在启动时生成
+通过重放攻击之后, 服务器按照正常的MAC消息认证码的认证流程, 用同样的哈希算法和密钥再次计算sign, 对比二者sign是否相等, 相等则认证通过
 
----
 
-## 迁移指南（从之前版本升级）
-
-如果您从客户端生成密钥的之前版本升级：
-
-### 数据库迁移
-```sql
--- 从用户表中删除密钥列
-ALTER TABLE user_http_security
-DROP COLUMN public_key,
-DROP COLUMN private_key;
-```
-
-### 客户端变更
-1. 移除客户端密钥生成代码
-2. 登录前调用 `GET /api/auth/server-public-key`
-3. 从登录流程中移除签名创建
-4. 更新 `LoginRequest`，不再包含 `clientPublicKey` 和 `signature`
-
-### 服务器变更
-- 重构后的代码已处理
-- 服务器在启动时生成单个密钥对或使用配置的密钥
