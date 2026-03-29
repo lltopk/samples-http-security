@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: open-api-based-message-authentication-code
+  datasource:
+    url: jdbc:mysql://192.168.18.100:3306/lyflexi?useSSL=false&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+    driver-class-name: com.mysql.jdbc.Driver
+    main:
+      allow-circular-references: true
+  data:
+    redis:
+      host: 192.168.18.100
+      port: 6379
+      database: 0
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: 100ms
+  mybatis-plus:
+    mapper-locations: classpath:/mapper/*.xml
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+
+server:
+  # Port number
+  port: 8081
+
+# Security configuration
+security:
+  # Replay attack prevention
+  replay-prevention:
+    # Nonce expiration time in seconds (5 minutes)
+    nonce-expire-seconds: 300
+    # Timestamp tolerance in milliseconds (5 minutes)
+    timestamp-tolerance-ms: 300000
