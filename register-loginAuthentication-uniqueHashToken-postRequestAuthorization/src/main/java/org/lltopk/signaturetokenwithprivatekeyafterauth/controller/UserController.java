@@ -53,6 +53,7 @@ public class UserController {
             data.put("username", user.getUsername());
             data.put("email", user.getEmail());
             data.put("createTime", user.getCreateTime());
+            data.put("publicSecretKey", serverKeyConfig.getServerPublicKeyBase64());
 
             return ApiResponse.success("Registration successful", data);
         } catch (RuntimeException e) {
