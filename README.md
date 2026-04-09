@@ -21,6 +21,12 @@
 ### 用户注册 登录认证
 注册和登录的这两个阶段要需要 **服务器端管理的 RSA 非对称密钥对**：
 
+常见的非对称加密算法有
+- RSA（Rivest-Shamir-Adleman）, 
+- ECC（Elliptic Curve Cryptography） , 
+- DSA（Digital Signature Algorithm）
+
+注册登录流程如下
 - 服务器密钥管理：服务器生成并管理非对称 RSA 密钥对
 - 无需客户端生成密钥：客户端不生成任何密钥
 - 用户注册: 保存用户名username, 用盐值`salt`和密码`rawpassword`, 进行`SHA-256哈希/Spring Security BCrypt哈希`之后最终将`encode(rawpassword, salt)`保存到数据库. 注册成功并返回服务器公钥给客户端
@@ -38,10 +44,21 @@ MD5的优点是快速, 因此是为了校验数据完整性设计的，而不是
 
 
 ### Token检查 用户索引 后续鉴权
+HMAC SHA256 是一种对称加密算法（Hash-based Message Authentication Code） 是一种基于哈希函数的消息认证码, 它结合一个秘密密钥和一个SHA256哈希算法来生成消息摘要，从而验证消息的完整性和真实性。
+
+属于对称加密：对称加密算法使用相同的密钥进行加密和解密。
+
+广泛用于数据完整性验证和消息认证，比如在 JWT（JSON Web Token）的签名中。
+
+常见对称加密算法：
+- AES（Advanced Encryption Standard）
+- DES（Data Encryption Standard）
+- 3DES（Triple DES）
+- HMAC（Hash-based Message Authentication Code）
 
 用户登录成功之后, 服务器要生成JWT令牌即Token给客户端, 以后每次请求都需携带Token证明身份
-- JWT令牌：登录认证成功后服务器用哈希算法HMAC256, 用JWT专属的密钥进行复杂哈希运算制作令牌(由于同时使用哈希和密钥因此也叫签名sign)返回给客户端
-- 检查令牌：后续所有用户请求都需要有效的 JWT 令牌, 验证原理是也用相同的哈希算法HMAC256和相同的JWT专属密钥, 对用户名等负载再次生成签名sign, 验证与用户传输token中的sign是否相等
+- JWT令牌：登录认证成功后服务器用哈希算法HMAC256, 用JWT专属的对称密钥进行复杂哈希运算制作令牌(由于同时使用哈希和密钥因此也叫签名sign)返回给客户端
+- 检查令牌：后续所有用户请求都需要有效的 JWT 令牌, 验证原理是也用相同的哈希算法HMAC256和相同的JWT专属对称密钥, 对用户名等负载再次生成签名sign, 验证与用户传输token中的sign是否相等
 - 请求鉴权: 你能干什么。系统根据token找到这个用户的权限列表(可配置)，判断当前请求的资源（通常就是URL + HTTP方法）是否在权限范围内。
 
 我之前就写过一个认证+鉴权方式如下库，核心就是一个泛型接口：
